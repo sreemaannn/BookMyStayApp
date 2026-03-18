@@ -1,56 +1,93 @@
 import java.util.*;
 
-// Reservation class
-class Reservation {
-    String reservationId;
+// Booking Request
+class BookingRequest {
     String customerName;
     String roomType;
 
-    Reservation(String reservationId, String customerName, String roomType) {
-        this.reservationId = reservationId;
+    BookingRequest(String customerName, String roomType) {
         this.customerName = customerName;
         this.roomType = roomType;
     }
+}
 
-    @Override
-    public String toString() {
-        return reservationId + " - " + customerName + " (" + roomType + ")";
+// Shared Booking System (Critical Section inside)
+class BookingSystem {
+
+    private Queue<BookingRequest> queue = new LinkedList<>();
+    private Map<String, Integer> inventory = new HashMap<>();
+    private Set<String> allocatedRooms = new HashSet<>();
+
+    private int roomCounter = 1;
+
+    public BookingSystem() {
+        inventory.put("Single", 2);
+        inventory.put("Double", 1);
+    }
+
+    // Add request (synchronized)
+    public synchronized void addRequest(BookingRequest request) {
+        queue.add(request);
+        System.out.println("Request Added: " + request.customerName);
+    }
+
+    // Process booking (critical section)
+    public synchronized void processBooking() {
+
+        if (queue.isEmpty()) return;
+
+        BookingRequest request = queue.poll();
+
+        System.out.println(Thread.currentThread().getName() +
+                " processing " + request.customerName);
+
+        // Check availability
+        if (inventory.getOrDefault(request.roomType, 0) > 0) {
+
+            String roomId = request.roomType.charAt(0) + "" + roomCounter++;
+
+            // Prevent duplicate allocation
+            if (!allocatedRooms.contains(roomId)) {
+
+                allocatedRooms.add(roomId);
+
+                // Update inventory safely
+                inventory.put(request.roomType,
+                        inventory.get(request.roomType) - 1);
+
+                System.out.println("Booking Confirmed: " +
+                        request.customerName + " -> " + roomId);
+            }
+
+        } else {
+            System.out.println("Booking Failed (No Rooms): " +
+                    request.customerName);
+        }
+    }
+
+    // Display final state
+    public void displayState() {
+        System.out.println("\nFinal Inventory: " + inventory);
+        System.out.println("Allocated Rooms: " + allocatedRooms);
     }
 }
 
-// Cancellation Service
-class CancellationService {
+// Worker Thread
+class BookingProcessor extends Thread {
 
-    // Stack for rollback (LIFO)
-    private Stack<String> rollbackStack = new Stack<>();
+    private BookingSystem system;
 
-    // Cancel booking
-    public void cancelBooking(String reservationId,
-                              Map<String, Reservation> bookings,
-                              Map<String, Integer> inventory) {
+    BookingProcessor(BookingSystem system, String name) {
+        super(name);
+        this.system = system;
+    }
 
-        // Validate existence
-        if (!bookings.containsKey(reservationId)) {
-            System.out.println("Cancellation Failed: Reservation not found -> " + reservationId);
-            return;
+    @Override
+    public void run() {
+        // Each thread tries multiple times
+        for (int i = 0; i < 3; i++) {
+            system.processBooking();
         }
-
-        // Get reservation
-        Reservation res = bookings.get(reservationId);
-
-        // Push to rollback stack
-        rollbackStack.push(reservationId);
-
-        // Restore inventory
-        inventory.put(res.roomType, inventory.get(res.roomType) + 1);
-
-        // Remove booking (mark as cancelled)
-        bookings.remove(reservationId);
-
-        System.out.println("Booking Cancelled: " + reservationId);
-
-        // Show rollback state
-        System.out.println("Rollback Stack: " + rollbackStack);
     }
 }
 
@@ -59,35 +96,34 @@ public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        // Inventory
-        Map<String, Integer> inventory = new HashMap<>();
-        inventory.put("Single", 0);
-        inventory.put("Double", 1);
+        BookingSystem system = new BookingSystem();
 
-        // Confirmed bookings
-        Map<String, Reservation> bookings = new HashMap<>();
+        // Simulate multiple guest requests
+        system.addRequest(new BookingRequest("Alice", "Single"));
+        system.addRequest(new BookingRequest("Bob", "Single"));
+        system.addRequest(new BookingRequest("Charlie", "Single"));
+        system.addRequest(new BookingRequest("David", "Double"));
+        system.addRequest(new BookingRequest("Eve", "Double"));
 
-        bookings.put("S1", new Reservation("S1", "Alice", "Single"));
-        bookings.put("D2", new Reservation("D2", "Bob", "Double"));
+        // Multiple threads (concurrent processing)
+        Thread t1 = new BookingProcessor(system, "Thread-1");
+        Thread t2 = new BookingProcessor(system, "Thread-2");
+        Thread t3 = new BookingProcessor(system, "Thread-3");
 
-        CancellationService service = new CancellationService();
+        t1.start();
+        t2.start();
+        t3.start();
 
-        // Cancel valid booking
-        service.cancelBooking("S1", bookings, inventory);
-
-        // Try cancelling again (invalid)
-        service.cancelBooking("S1", bookings, inventory);
-
-        // Cancel another booking
-        service.cancelBooking("D2", bookings, inventory);
-
-        // Final state
-        System.out.println("\nFinal Inventory:");
-        for (String type : inventory.keySet()) {
-            System.out.println(type + ": " + inventory.get(type));
+        // Wait for threads to finish
+        try {
+            t1.join();
+            t2.join();
+            t3.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
-        System.out.println("\nRemaining Bookings:");
-        System.out.println(bookings);
+        // Final system state
+        system.displayState();
     }
 }
