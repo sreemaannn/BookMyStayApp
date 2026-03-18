@@ -1,115 +1,86 @@
 import java.util.*;
 
-class BookingRequest {
-    String customerName;
-    String roomType;
+// Represents an Add-On Service
+class Service {
+    String serviceName;
+    double cost;
 
-    BookingRequest(String customerName, String roomType) {
-        this.customerName = customerName;
-        this.roomType = roomType;
+    Service(String serviceName, double cost) {
+        this.serviceName = serviceName;
+        this.cost = cost;
+    }
+
+    @Override
+    public String toString() {
+        return serviceName + " (₹" + cost + ")";
     }
 }
 
-public class BookMyStayApp{
+public class BookMyStayApp {
 
-    // FIFO Queue for booking requests
-    private static Queue<BookingRequest> requestQueue = new LinkedList<>();
-
-    // Inventory: room type -> available count
-    private static Map<String, Integer> inventory = new HashMap<>();
-
-    // Track allocated room IDs (global uniqueness)
-    private static Set<String> allocatedRoomIds = new HashSet<>();
-
-    // Map room type -> assigned room IDs
-    private static Map<String, Set<String>> roomAllocations = new HashMap<>();
-
-    // Room ID generator counter
-    private static int roomCounter = 1;
+    // Map: Reservation ID -> List of Services
+    private static Map<String, List<Service>> reservationServices = new HashMap<>();
 
     public static void main(String[] args) {
 
-        // Initialize inventory
-        inventory.put("Single", 2);
-        inventory.put("Double", 2);
-        inventory.put("Suite", 1);
+        // Example reservation IDs (from previous use case)
+        String res1 = "S1";
+        String res2 = "D2";
 
-        // Initialize allocation map
-        roomAllocations.put("Single", new HashSet<>());
-        roomAllocations.put("Double", new HashSet<>());
-        roomAllocations.put("Suite", new HashSet<>());
+        // Add services
+        addService(res1, new Service("Breakfast", 500));
+        addService(res1, new Service("Spa", 1500));
 
-        // Add booking requests (FIFO)
-        requestQueue.add(new BookingRequest("Alice", "Single"));
-        requestQueue.add(new BookingRequest("Bob", "Double"));
-        requestQueue.add(new BookingRequest("Charlie", "Single"));
-        requestQueue.add(new BookingRequest("David", "Suite"));
-        requestQueue.add(new BookingRequest("Eve", "Suite")); // should fail
+        addService(res2, new Service("Airport Pickup", 800));
 
-        // Process bookings
-        processBookings();
+        // Display services
+        displayServices(res1);
+        displayServices(res2);
 
-        // Display final allocations
-        displayAllocations();
+        // Show total cost
+        System.out.println("\nTotal Add-On Cost for " + res1 + ": ₹" + calculateTotalCost(res1));
+        System.out.println("Total Add-On Cost for " + res2 + ": ₹" + calculateTotalCost(res2));
     }
 
-    // Process queue
-    private static void processBookings() {
-        while (!requestQueue.isEmpty()) {
+    // Add service to reservation
+    private static void addService(String reservationId, Service service) {
 
-            BookingRequest request = requestQueue.poll(); // FIFO
-            System.out.println("\nProcessing request for: " + request.customerName);
+        reservationServices.putIfAbsent(reservationId, new ArrayList<>());
+        reservationServices.get(reservationId).add(service);
 
-            allocateRoom(request);
+        System.out.println("Added " + service.serviceName + " to Reservation " + reservationId);
+    }
+
+    // Display services for a reservation
+    private static void displayServices(String reservationId) {
+
+        System.out.println("\nServices for Reservation " + reservationId + ":");
+
+        List<Service> services = reservationServices.get(reservationId);
+
+        if (services == null || services.isEmpty()) {
+            System.out.println("No services selected.");
+            return;
+        }
+
+        for (Service s : services) {
+            System.out.println("- " + s);
         }
     }
 
-    // Core allocation logic
-    private static void allocateRoom(BookingRequest request) {
-        String type = request.roomType;
+    // Calculate total cost
+    private static double calculateTotalCost(String reservationId) {
 
-        // Check availability
-        if (inventory.get(type) > 0) {
+        double total = 0;
 
-            // Generate unique room ID
-            String roomId = generateRoomId(type);
+        List<Service> services = reservationServices.get(reservationId);
 
-            // Ensure uniqueness
-            if (!allocatedRoomIds.contains(roomId)) {
-
-                // Atomic operation: assign + update inventory
-                allocatedRoomIds.add(roomId);
-                roomAllocations.get(type).add(roomId);
-
-                inventory.put(type, inventory.get(type) - 1);
-
-                System.out.println("Booking Confirmed!");
-                System.out.println("Customer: " + request.customerName);
-                System.out.println("Room Type: " + type);
-                System.out.println("Room ID: " + roomId);
+        if (services != null) {
+            for (Service s : services) {
+                total += s.cost;
             }
-
-        } else {
-            System.out.println("Booking Failed for " + request.customerName + " (No rooms available)");
-        }
-    }
-
-    // Unique Room ID generator
-    private static String generateRoomId(String type) {
-        return type.substring(0, 1).toUpperCase() + roomCounter++;
-    }
-
-    // Display results
-    private static void displayAllocations() {
-        System.out.println("\nFinal Room Allocations:");
-
-        for (String type : roomAllocations.keySet()) {
-            System.out.println(type + " Rooms: " + roomAllocations.get(type));
         }
 
-        System.out.println("\nRemaining Inventory:");
-        for (String type : inventory.keySet()) {
-            System.out.println(type + ": " + inventory.get(type));
-        }
+        return total;
     }
 }
